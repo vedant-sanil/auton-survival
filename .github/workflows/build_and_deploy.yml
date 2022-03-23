@@ -1,0 +1,93 @@
+name: Test and Deploy to PyPI
+
+on:
+  push:
+    branches:
+      - 'dev-package'
+    tags:
+      - '*.*.*' 
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+      strategy:
+        matrix:
+          os: [ubuntu-latest]
+          python-version: ['3.6', '3.7', '3.8', '3.9']
+          architecture: ['x86', 'x64']
+          
+      defaults:
+        run:
+          shell: bash
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setting up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.architecture }}
+
+      # from refs/tags/v.1.2.3 get 1.2.3
+      - name: Autobump version
+        run: |
+          VERSION=$(echo $GITHUB_REF | sed 's#.*/v##')
+          PLACEHOLDER='__version__ = "develop"'
+          VERSION_FILE='auton_survival/_version.py'
+
+          # Ensures placeholder exists in linux file, aborts build if it doesnt exist
+          grep "$PLACEHOLDER" "$VERSION_FILE"
+          sed -i "s/$PLACEHOLDER/__version__ = \"${VERSION}\"/g" "$VERSION_FILE"
+        shell: bash
+
+      - name: Updating pip
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools wheel
+
+      - name: Installing requirements and dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install --upgrade pytest
+          pip install astroid>=2.7
+          pip install pylint>=2.7
+          pip install pytest-cov
+
+      # Run tests and code linting
+      - name: Running unit tests
+        run: python -m pytest tests/ --cov
+
+      - name: Analyze code with pylint
+        run: pylint --fail-under=3 auton_survival/
+
+      # Build source archive and wheel separately
+      - name: Building source distribution
+        run: python setup.py sdist
+
+      - name: Building wheel
+        run: python setup.py bdist_wheel
+
+      # Publish to PyPI
+      - name: Install twine 
+        run: pip install twine
+
+      - name: Publish distribution to test PyPI 
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && endsWith(github.ref, '0000')
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          user: __token__
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          repository_url: https://test.pypi.org/legacy/
+          skip_existing: true
+          
+      #- name: Publish distribution to production PyPI
+      #  if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+      #  uses:
+      #  TWINE_USERNAME: 
+
+
+      

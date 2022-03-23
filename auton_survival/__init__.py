@@ -275,8 +275,6 @@ src="https://www.cs.cmu.edu/~chiragn/auton_logo.png">
 
 '''
 
-__version__ = "0.1.0"
-
 
 from .models.dsm import DeepSurvivalMachines
 from .models.dcm import DeepCoxMixtures
